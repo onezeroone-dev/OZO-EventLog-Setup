@@ -20,10 +20,12 @@ ozo-windows-event-log-provider-setup
 ```
 
 ## Parameters
-None.
+|Parameter|Description|
+|---------|-----------|
+|`Remove`|Removes the _One Zero One_ provider.|
 
 ## Notes
-This script requires an x86 or x64 processor architecture. For guidance on leveraging the One Zero One Windows event log provider in your scripts, please see **[GUIDE.md](https://github.com/onezeroone-dev/OZO-EventLog-Setup/blob/main/GUIDE.md)**.
+This script requires an x86 or x64 processor architecture. For guidance on leveraging the One Zero One Windows event log provider in your scripts, please see **[GUIDE.md](GUIDE.md)**.
 
 ## Acknowledgements
 Special thanks to my employer, [Sonic Healthcare USA](https://sonichealthcareusa.com), who has supported the growth of my PowerShell skillset and enabled me to contribute portions of my work product to the PowerShell community.

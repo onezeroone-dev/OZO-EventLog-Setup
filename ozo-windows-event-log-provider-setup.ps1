@@ -7,13 +7,13 @@
     .COMPANYNAME One Zero One
     .COPYRIGHT This script is released under the terms of the GNU General Public License ("GPL") version 2.0.
     .TAGS
-    .LICENSEURI https://github.com/onezeroone-dev/OZO-EventLog-Setup/blob/main/LICENSE
-    .PROJECTURI https://github.com/onezeroone-dev/OZO-EventLog-Setup
+    .LICENSEURI https://github.com/onezeroone-dev/OZO-Windows-Event-Log-Provider-Setup/blob/main/LICENSE
+    .PROJECTURI https://github.com/onezeroone-dev/OZO-Windows-Event-Log-Provider-Setup
     .ICONURI
     .EXTERNALMODULEDEPENDENCIES 
     .REQUIREDSCRIPTS
     .EXTERNALSCRIPTDEPENDENCIES
-    .RELEASENOTES https://github.com/onezeroone-dev/OZO-EventLog-Setup/blob/main/CHANGELOG.md
+    .RELEASENOTES https://github.com/onezeroone-dev/OZO-Windows-Event-Log-Provider-Setup/blob/main/CHANGELOG.md
     .PRIVATEDATA
 #>
 
@@ -21,17 +21,17 @@
     .SYNOPSIS
     See description.
     .DESCRIPTION 
-    A non-interactive script that creates a "One Zero One" Windows event provider. Implementing this provider supports the optimal use of the New-OZOLogger function (available in the OZOLogger PowerShell Module).
+    A non-interactive script that creates a "One Zero One" Windows event log provider. Implementing this provider supports the optimal use of the New-OZOLogger function (available in the OZOLogger PowerShell Module).
     .PARAMETER Remove
-    Removes the "One Zero One" provider (if present).
+    Removes the "One Zero One" provider.
     .LINK
-    https://github.com/onezeroone-dev/OZO-EventLog-Setup/blob/main/README.md
+    https://github.com/onezeroone-dev/OZO-Windows-Event-Log-Provider-Setup/blob/main/README.md
     .NOTES
-    This script requires an x64 processor.
+    This script requires an x86 or x64 processor.
 #> 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
-    [Parameter(HelpMessage='Removes the "One Zero One" provider (if present)')][Switch]$Remove
+    [Parameter(HelpMessage='Removes the "One Zero One" provider')][Switch]$Remove
 )
 
 # CLASSES
@@ -43,6 +43,11 @@ Class OZOESConfiguration {
     [Boolean] $manifestChanged = $true
     [Boolean] $providerExists  = $true
     [Boolean] $Validates       = $true
+    [Int16]   $processorArch   = $null
+    [String]  $dllBase64       = $null
+    [String]  $dllx86Base64    = $null
+    [String]  $dllx64Base64    = $null
+    [String]  $manifestXML     = $null
     [String]  $providerName    = $null
     [String]  $ozoEventLogDir  = $null
     [String]  $dllPath         = $null
@@ -50,12 +55,16 @@ Class OZOESConfiguration {
     [String]  $wEvtUtilPath    = $null
     # METHODS
     # Constructor method
-    OZOESConfiguration() {
+    OZOESConfiguration($dllx86Base64,$dllx64Base64,$manifestXML) {
         # Set properties
         $this.channelNames   = @("Operational")
-        $this.installModules  = @("OZOLogger")
+        $this.installModules = @("OZOLogger")
+        $this.processorArch  = (Get-CimInstance -ClassName CIM_Processor).Architecture
+        $this.dllx86Base64   = $dllx86Base64
+        $this.dllx64Base64   = $dllx64Base64
+        $this.manifestXML    = $manifestXML
         $this.providerName   = "One Zero One"
-        $this.ozoEventLogDir = (Join-Path -Path $Env:ProgramFiles -ChildPath (Join-Path -Path $this.providerName -ChildPath "OZO-EventLog"))
+        $this.ozoEventLogDir = (Join-Path -Path $Env:ProgramFiles -ChildPath (Join-Path -Path $this.providerName -ChildPath "OZO-Windows-Event-Log-Provider"))
         $this.dllPath        = (Join-Path -Path $this.ozoEventLogDir -ChildPath "ozo-messages.dll")
         $this.manifestPath   = (Join-Path -Path $this.ozoEventLogDir -ChildPath "ozo-messages.man")
         $this.wEvtUtilPath   = (Join-Path -Path $Env:windir -ChildPath (Join-Path -Path "System32" -ChildPath "wevtutil.exe"))
@@ -86,10 +95,16 @@ Class OZOESConfiguration {
             Write-OZOProvider -Message "Provider does not exist." -Level "Information"
             $this.providerExists = $false
         }
-        # Determine if processor architecture is not x64; see https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor
-        If ((Get-CimInstance -ClassName CIM_Processor).Architecture -ne 9) {
-            # Processor architecture is not x64
-            Write-OZOProvider -Message "Processor is not x64." -Level "Error"
+        # Determine if processor architecture is supported; see https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-processor to translate processor architectures to the relevant Int16
+        If ($this.processorArch -eq 0) {
+            # Processor is x86
+            $this.dllBase64 = $this.dllx86Base64
+        } ElseIf ($this.processorArch -eq 9) {
+            # Processor is x64
+            $this.dllBase64 = $this.dllx64Base64
+        } Else {
+            # Processor architecture is not supported
+            Write-OZOProvider -Message "Processor is not supported." -Level "Error"
             $Return = $false
         }
         # Return
@@ -98,12 +113,12 @@ Class OZOESConfiguration {
     # DLL inspection method
     Hidden [Boolean] InspectDLL() {
         [Boolean] $Return = $true
-        # Determine if DLL exists
+        # Determine if the DLL exists
         If ((Test-Path -Path $this.dllPath) -eq $true) {
             # DLL exists
             Write-OZOProvider -Message "DLL exists." -Level "Information"
             # Determine if there are differences between the DLLs
-            If ((Compare-Object -ReferenceObject $Global:dllBase64 -DifferenceObject ([System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($this.dllPath)))) -eq $true) {
+            If ((Compare-Object -ReferenceObject $this.dllBase64 -DifferenceObject ([System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($this.dllPath)))) -eq $true) {
                 # Differences
                 Write-OZOProvider -Message "There are differences between the DLLs." -Level "Information"
             } Else {
@@ -126,7 +141,7 @@ Class OZOESConfiguration {
             # Manifest exists
             Write-OZOProvider -Message "Manifest exists." -Level "Information"
             # Determine if there are differences between the manifests
-            If ((Compare-Object -ReferenceObject $Global:manifestXML -DifferenceObject (Get-Content -Path $this.manifestPath)) -eq $true) {
+            If ((Compare-Object -ReferenceObject $this.manifestXML -DifferenceObject (Get-Content -Path $this.manifestPath)) -eq $true) {
                 # Differences
                 Write-OZOProvider -Message "There are differences between the manifests." -Level "Information"
             } Else {
@@ -153,16 +168,16 @@ Class OESMain {
             $this.RemoveProvider()
             Write-OZOProvider -Message "Provider removed." -Level "Information"
         } ElseIf ($Global:oesConfiguration.providerExists -eq $true -And ($Global:oesConfiguration.dllChanged -Or $Global:oesConfiguration.manifestChanged) -eq $true) {
-            # Log exists and the DLL or manifest has changed; call RemoveProvider + AddProvider
+            # Log exists and the DLL or manifest has changed; call RemoveProvider + AddProvider + InstallModules
             $this.RemoveProvider()
             $this.AddProvider()
             $this.InstallModules()
-            Write-OZOProvider -Message "Thank you for updating the One Zero One event provider." -Level "Information"
+            Write-OZOProvider -Message "Thank you for updating the One Zero One Windows event log provider." -Level "Information"
         } ElseIf ($Global:oesConfiguration.providerExists -eq $false) {
-            # Log does not exist; call AddProvider
+            # Log does not exist; call AddProvider + InstallModules
             $this.AddProvider()
             $this.InstallModules()
-            Write-OZOProvider -Message "Thank you for installing the One Zero One event provider." -Level "Information"
+            Write-OZOProvider -Message "Thank you for installing the One Zero One Windows event log provider." -Level "Information"
         } ElseIf ($Global:oesConfiguration.providerExists -eq $true -And ($Global:oesConfiguration.dllChanged -And $Global:oesConfiguration.manifestChanged) -eq $false) {
             Write-OZOProvider -Message "Provider exists and the configuration has not changed; skipping." -Level "Information"
         } Else {
@@ -177,6 +192,8 @@ Class OESMain {
         If ((Test-Path -Path $Global:oesConfiguration.manifestPath) -eq $false) {
             # Manifest does not exist; write payload manifest to disk and attempt to remove
             Write-OZOProvider -Message "Provider exists but manifest is missing; attempting to remove based on the payload manifest." -Level "Warning"
+            # Export the payload manifest to an XML file in the Program Files directory
+            $Global:oesConfiguration.manifestXML | Out-File -FilePath $Global:oesConfiguration.manifestPath
         }
         # Uninstall the manifest
         Start-Process -NoNewWindow -Wait -FilePath $Global:oesConfiguration.wEvtUtilPath -ArgumentList ('um "' + $Global:oesConfiguration.manifestPath + '"')
@@ -187,9 +204,9 @@ Class OESMain {
         # Create the Program Files directory
         New-Item -ItemType Directory -Path $Global:oesConfiguration.ozoEventLogDir -Force
         # Convert the payload base64 DLL to a binary file in the Program Files directory
-        [System.IO.File]::WriteAllBytes($Global:oesConfiguration.dllPath,[Convert]::FromBase64String($Global:dllBase64))
+        [System.IO.File]::WriteAllBytes($Global:oesConfiguration.dllPath,[Convert]::FromBase64String($Global:oesConfiguration.dllBase64))
         # Export the payload manifest to an XML file in the Program Files directory
-        $Global:manifestXML | Out-File -FilePath $Global:oesConfiguration.manifestPath
+        $Global:oesConfiguration.manifestXML | Out-File -FilePath $Global:oesConfiguration.manifestPath
         # Install the manifest
         Start-Process -NoNewWindow -Wait -FilePath $Global:oesConfiguration.wEvtUtilPath -ArgumentList ('im "' + $Global:oesConfiguration.manifestPath + '"')
         # Iterate through the channels
@@ -249,9 +266,11 @@ Function Write-OZOProvider {
     }
 }
 
-# GLOBALS
-[String] $Global:dllBase64 = "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"
-[String] $Global:manifestXML = @'
+# MAIN
+# Variables
+[String] $dllx86Base64 = "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"
+[String] $dllx64Base64 = "TVqQAAMAAAAEAAAA//8AALgAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqAAAAA4fug4AtAnNIbgBTM0hVGhpcyBwcm9ncmFtIGNhbm5vdCBiZSBydW4gaW4gRE9TIG1vZGUuDQ0KJAAAAAAAAABpLz3fLU5TjC1OU4wtTlOMrsisjCxOU4yuyFGNLE5TjFJpY2gtTlOMUEUAAGSGAgA4E11nAAAAAAAAAADwACIgCwIOKgAAAAAACAAAAAAAAAAAAAAAEAAAAAAAgAEAAAAAEAAAAAIAAAYAAAAAAAAABgAAAAAAAAAAMAAAAAIAAAAAAAACAGABAAAQAAAAAAAAEAAAAAAAAAAAEAAAAAAAABAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAA6AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALnJkYXRhAACgAAAAABAAAAACAAAAAgAAAAAAAAAAAAAAAAAAQAAAQC5yc3JjAAAA6AQAAAAgAAAABgAAAAQAAAAAAAAAAAAAAAAAAEAAAEAAAAAAOBNdZwAAAAANAAAAbAAAADQQAAA0AgAAGAAAAACAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAcAAAALnJkYXRhAAAcEAAAGAAAAC5yZGF0YSR2b2x0bWQAAAA0EAAAbAAAAC5yZGF0YSR6enpkYmcAAAAAIAAAwAAAAC5yc3JjJDAxAAAAAMAgAAAoBAAALnJzcmMkMDIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAQCgAACAIAAAgAsAAAA4AACAAAAAAAAAAAAAAAAAAAABAAEAAABQAACAAAAAAAAAAAAAAAAAAAABAAEAAABoAACAAAAAAAAAAAAAAAAAAAABAAkEAACAAAAAAAAAAAAAAAAAAAAAAAABAAkEAACQAAAAcCEAAHIDAAAAAAAAAAAAAMAgAACwAAAAAAAAAAAAAAANAFcARQBWAFQAXwBUAEUATQBQAEwAQQBUAEUAAAAAAAIAAAACAABQBAAAUBwAAADoAwGw6gMBsGgAAAAUAAEARQByAHIAbwByAA0ACgAAABgAAQBXAGEAcgBuAGkAbgBnAA0ACgAAACAAAQBJAG4AZgBvAHIAbQBhAHQAaQBvAG4ADQAKAAAAGAABACUAMQAlAHIAJQAyAA0ACgAAAAAAGAABACUAMQAlAHIAJQAyAA0ACgAAAAAAGAABACUAMQAlAHIAJQAyAA0ACgAAAAAAQ1JJTXADAAAFAAEAAQAAAJqEhxrfKU5Giulx2YGgZnwkAAAAV0VWVEwDAAD/////CAAAAAUAAAB0AAAABwAAAMgAAAANAAAA8AEAAAIAAAAgAgAAAAAAACwCAAABAAAAuAIAAAMAAADEAgAABAAAANACAABDSEFOVAAAAAEAAAAAAAAAkAAAABAAAAD/////OAAAAE8AbgBlACAAWgBlAHIAbwAgAE8AbgBlAC8ATwBwAGUAcgBhAHQAaQBvAG4AYQBsAAAAAABUVEJMKAEAAAEAAABURU1QHAEAAAIAAAACAAAAoAEAAAEAAACejJUFtqWnWvHdIwJWn9TqDwEBAAH//5gAAABEggkARQB2AGUAbgB0AEQAYQB0AGEAAAACQf//NwAAAIpvBABEAGEAdABhAAAAHwAAAAZLlQQATgBhAG0AZQAAAAUBBgBTAG8AdQByAGMAZQACDQAAAQRB//85AAAAim8EAEQAYQB0AGEAAAAhAAAABkuVBABOAGEAbQBlAAAABQEHAE0AZQBzAHMAYQBnAGUAAg0BAAEEBAAAAAAAAQEAAAAAAAAAAAAAyAEAAAAAAAABAQAAAAAAAAAAAADcAQAAFAAAAFMAbwB1AHIAYwBlAAAAAAAUAAAATQBlAHMAcwBhAGcAZQAAAFBSVkEwAAAAAQAAAAEAABAEAgAATwBuAGUAIABaAGUAcgBvACAATwBuAGUAAAAAAE9QQ08AAAAAAAAAAExFVkyMAAAAAwAAAAIAAAACAABQXAIAAAMAAAADAABQdAIAAAQAAAAEAABQkAIAABgAAAB3AGkAbgA6AEUAcgByAG8AcgAAABwAAAB3AGkAbgA6AFcAYQByAG4AaQBuAGcAAAAoAAAAdwBpAG4AOgBJAG4AZgBvAHIAbQBhAHQAaQBvAG4AYQBsAAAAVEFTSwAAAAAAAAAAS0VZVwAAAAAAAAAARVZOVKAAAAADAAAAAAAAAOgDARAEAAAAAAAAAAAAAIDoAwGw1AAAAAAAAABQAgAAAAAAAAAAAAAAAAAAgAAAAOkDARADAAAAAAAAAAAAAIDpAwGw1AAAAAAAAABEAgAAAAAAAAAAAAAAAAAAgAAAAOoDARACAAAAAAAAAAAAAIDqAwGw1AAAAAAAAAA4AgAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+[String] $manifestXML  = @'
 <?xml version="1.0"?>
 <instrumentationManifest xsi:schemaLocation="http://schemas.microsoft.com/win/2004/08/events eventman.xsd" xmlns="http://schemas.microsoft.com/win/2004/08/events" xmlns:win="http://manifests.microsoft.com/win/2004/08/windows/events" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:trace="http://schemas.microsoft.com/win/2004/08/events/trace">
 	<instrumentation>
@@ -289,12 +308,8 @@ Function Write-OZOProvider {
 	</localization>
 </instrumentationManifest>
 '@
-Set-Variable -Name $Global:dllBase64 -Option ReadOnly
-Set-Variable -Name $Global:manifestXML -Option ReadOnly
-
-# MAIN
 # Create an object of the OESCOnfiguration class
-[PSCustomObject]$Global:oesConfiguration = [OZOESConfiguration]::new()
+[PSCustomObject]$Global:oesConfiguration = [OZOESConfiguration]::new($dllx86Base64,$dllx64Base64,$manifestXML)
 # Determine if the configuration is valid
 If ($Global:oesConfiguration.Validates -eq $true) {
     # Configuration validates
