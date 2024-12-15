@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 
 <#PSScriptInfo
-    .VERSION 1.0.0
+    .VERSION 1.0.1
     .GUID 0e6ba28d-02be-4527-9412-bc0547b1a2be
     .AUTHOR Andy Lievertz <alievertz@onezeroone.dev>
     .COMPANYNAME One Zero One
@@ -275,7 +275,7 @@ Function Write-OZOProvider {
 <instrumentationManifest xsi:schemaLocation="http://schemas.microsoft.com/win/2004/08/events eventman.xsd" xmlns="http://schemas.microsoft.com/win/2004/08/events" xmlns:win="http://manifests.microsoft.com/win/2004/08/windows/events" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:trace="http://schemas.microsoft.com/win/2004/08/events/trace">
 	<instrumentation>
 		<events>
-			<provider name="One Zero One" guid="{1A87849A-29DF-464E-8AE9-71D981A0667C}" symbol="One_Zero_One" resourceFileName="%PROGRAMDATA%\One Zero One\OZO-EventLog\ozo-messages.dll" messageFileName="%PROGRAMDATA%\One Zero One\OZO-EventLog\ozo-messages.dll">
+			<provider name="One Zero One" guid="{1A87849A-29DF-464E-8AE9-71D981A0667C}" symbol="One_Zero_One" resourceFileName="%PROGRAMFILES%\One Zero One\OZO-Windows-Event-Log-Provider\ozo-messages.dll" messageFileName="%PROGRAMFILES%\One Zero One\OZO-Windows-Event-Log-Provider\ozo-messages.dll">
 				<events>
 					<event symbol="Information" value="1000" version="1" channel="One Zero One/Operational" level="win:Informational" template="OZOEventTemplate" message="$(string.OneZeroOne.event.1000.message)"></event>
 					<event symbol="Warning" value="1001" version="1" channel="One Zero One/Operational" level="win:Warning" template="OZOEventTemplate" message="$(string.OneZeroOne.event.1001.message)"></event>
